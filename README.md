@@ -10,11 +10,10 @@
 - Compatible with SafeArea for proper layout handling.
 
 ## Installation
-Add the following line to your `pubspec.yaml` file under `dependencies`:
+Run command below to add package to `pubspec.yaml`:
 
-```yaml
-dependencies:
-  accordion_sliver_app_bar: any
+```bash
+flutter pub add accordion_sliver_app_bar
 ```
 
 Then run:
