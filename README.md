@@ -123,7 +123,7 @@ You can control various aspects of the accordion, such as:
 - Wrapping each child with custom builders.
 
 ## Contributions
-Contributions are welcome! Feel free to submit issues, feature requests, or pull requests on the [GitHub repository](https://github.com/your-username/accordion_sliver_app_bar).
+Contributions are welcome! Feel free to submit issues, feature requests, or pull requests on the [GitHub repository](https://github.com/mehrzut/accordion_sliver_app_bar).
 
 ## License
 This package is released under the MIT License. See the LICENSE file for details.
