@@ -1,10 +1,7 @@
 library accordion_sliver_app_bar;
 
-import 'dart:developer';
-
 import 'package:accordion_sliver_app_bar/core/extensions.dart';
 import 'package:flutter/material.dart';
-
 
 /// A widget that creates a dynamic sliver app bar with expandable and collapsible children.
 /// The children expand and collapse based on their priority values.
@@ -54,11 +51,17 @@ class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
           (widget.delegate.safeArea
               ? 0
               : MediaQuery.paddingOf(context).vertical),
+      toolbarHeight: collapsedHeight -
+          (widget.delegate.safeArea
+              ? 0
+              : MediaQuery.paddingOf(context).vertical),
       pinned: widget.delegate.pinned,
       floating: widget.delegate.floating,
       flexibleSpace: FlexibleSpaceBar(
         titlePadding: EdgeInsets.zero,
         expandedTitleScale: 1.0,
+        collapseMode: CollapseMode.none,
+        background: const SizedBox(),
         title: SafeArea(
           bottom: widget.delegate.safeArea,
           top: widget.delegate.safeArea,
@@ -122,56 +125,69 @@ class _AccordionSliverChildrenListState
       builder: (context, constraints) {
         final lastPriorityCollapsed =
             _getPriorityOfLastCollapsingItem(constraints.maxHeight);
-        log(lastPriorityCollapsed.toString());
-        return Align(
-          alignment: widget.delegate.animationAlignment,
-          child: SingleChildScrollView(
-            physics: const NeverScrollableScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: widget.delegate.crossAxisAlignment,
-              mainAxisAlignment: widget.delegate.mainAxisAlignment,
-              children: widget.delegate.children.map((child) {
-                final isExpanded = lastPriorityCollapsed == null
-                    ? true
-                    : child.priority > lastPriorityCollapsed;
-                final animatedChild = AnimatedCrossFade(
-                  firstChild: child.expanded.child,
-                  secondChild: child.collapsed.child,
-                  crossFadeState: isExpanded
-                      ? CrossFadeState.showFirst
-                      : CrossFadeState.showSecond,
-                  duration: widget.delegate.duration,
-                  layoutBuilder: widget.delegate.layoutBuilder ??
-                      AnimatedCrossFade.defaultLayoutBuilder,
-                  firstCurve: Curves.easeIn,
-                  secondCurve: Curves.easeOut,
-                  sizeCurve: Curves.decelerate,
-                );
-                if (child.wrapperBuilder != null) {
-                  return AnimatedContainer(
-                    duration: widget.delegate.duration,
-                    width: isExpanded
-                        ? child.expanded.preferredSize.width
-                        : child.collapsed.preferredSize.width,
-                    height: isExpanded
-                        ? child.expanded.preferredSize.height
-                        : child.collapsed.preferredSize.height,
-                    child: Align(
+
+        final progress = (constraints.maxHeight - collapsedHeight) /
+            (expandedHeight - collapsedHeight);
+        return Stack(
+          children: [
+            widget.delegate.backgroundBuilder != null
+                ? widget.delegate.backgroundBuilder!(
+                    context, progress.clamp(0.0, 1.0))
+                : const SizedBox(),
+            Align(
+              alignment: widget.delegate.animationAlignment,
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: widget.delegate.crossAxisAlignment,
+                  mainAxisAlignment: widget.delegate.mainAxisAlignment,
+                  children: widget.delegate.children.map((child) {
+                    final isExpanded = lastPriorityCollapsed == null
+                        ? true
+                        : child.priority > lastPriorityCollapsed;
+                    final animatedChild = AnimatedCrossFade(
                       alignment: widget.delegate.animationAlignment,
-                      child: child.wrapperBuilder!(
-                          context,
-                          animatedChild,
-                          isExpanded
-                              ? child.expanded.preferredSize
-                              : child.collapsed.preferredSize,
-                          isExpanded),
-                    ),
-                  );
-                }
-                return animatedChild;
-              }).toList(),
+                      firstChild: SizedBox(
+                          key: UniqueKey(), child: child.expanded.child),
+                      secondChild: SizedBox(
+                          key: UniqueKey(), child: child.collapsed.child),
+                      crossFadeState: isExpanded
+                          ? CrossFadeState.showFirst
+                          : CrossFadeState.showSecond,
+                      duration: widget.delegate.duration,
+                      layoutBuilder: widget.delegate.layoutBuilder ??
+                          AnimatedCrossFade.defaultLayoutBuilder,
+                      firstCurve: Curves.easeIn,
+                      secondCurve: Curves.easeOut,
+                      sizeCurve: Curves.decelerate,
+                    );
+                    if (child.wrapperBuilder != null) {
+                      return AnimatedContainer(
+                        duration: widget.delegate.duration,
+                        width: isExpanded
+                            ? child.expanded.preferredSize.width
+                            : child.collapsed.preferredSize.width,
+                        height: isExpanded
+                            ? child.expanded.preferredSize.height
+                            : child.collapsed.preferredSize.height,
+                        child: Align(
+                          alignment: widget.delegate.animationAlignment,
+                          child: child.wrapperBuilder!(
+                              context,
+                              animatedChild,
+                              isExpanded
+                                  ? child.expanded.preferredSize
+                                  : child.collapsed.preferredSize,
+                              isExpanded),
+                        ),
+                      );
+                    }
+                    return animatedChild;
+                  }).toList(),
+                ),
+              ),
             ),
-          ),
+          ],
         );
       },
     );
@@ -219,7 +235,6 @@ class _AccordionSliverChildrenListState
                 expandsOnAndAfter: itemsMinSpaceToExpand,
               )));
     }
-    log(shrinkPoints.toString());
   }
 }
 
@@ -248,16 +263,20 @@ class AccordionSliverChild {
 
   /// Creates a child that vanishes (becomes zero size) when collapsed.
   factory AccordionSliverChild.vanish({
-    required SizedSliverChild expanded,
+    required SizedSliverChild child,
     required int priority,
+    Widget Function(
+            BuildContext context, Widget child, Size size, bool isExpanded)?
+        wrapperBuilder,
   }) =>
       AccordionSliverChild._(
-        expanded: expanded,
+        expanded: child,
         collapsed: SizedSliverChild(
           preferredSize: Size.zero,
           child: const SizedBox(),
         ),
         priority: priority,
+        wrapperBuilder: wrapperBuilder,
       );
 
   factory AccordionSliverChild({
@@ -271,6 +290,21 @@ class AccordionSliverChild {
       AccordionSliverChild._(
         expanded: expanded,
         collapsed: collapsed,
+        priority: priority,
+        wrapperBuilder: wrapperBuilder,
+      );
+
+  /// Creates a child that is static and won't collapse.
+  factory AccordionSliverChild.static({
+    required SizedSliverChild child,
+    required int priority,
+    Widget Function(
+            BuildContext context, Widget child, Size size, bool isExpanded)?
+        wrapperBuilder,
+  }) =>
+      AccordionSliverChild._(
+        expanded: child,
+        collapsed: child,
         priority: priority,
         wrapperBuilder: wrapperBuilder,
       );
@@ -312,6 +346,8 @@ class AccordionSliverDelegate {
   final AlignmentGeometry animationAlignment;
   final AnimatedCrossFadeBuilder? layoutBuilder;
   final Duration duration;
+  final Widget Function(BuildContext context, double progress)?
+      backgroundBuilder;
 
   AccordionSliverDelegate({
     required this.children,
@@ -323,6 +359,7 @@ class AccordionSliverDelegate {
     this.mainAxisAlignment = MainAxisAlignment.start,
     this.animationAlignment = AlignmentDirectional.bottomCenter,
     required this.duration,
+    this.backgroundBuilder,
   });
 }
 

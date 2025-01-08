@@ -2,6 +2,12 @@
 
 `AccordionSliverAppBar` is a customizable Flutter package that provides a SliverAppBar with dynamic accordion-style animations. It enables you to create SliverAppBars where sections can expand or collapse based on priorities, creating an engaging and responsive UI.
 
+
+## Demo
+<img src="https://raw.githubusercontent.com/mehrzut/accordion_sliver_app_bar/master/assets/demo.gif" alt="Accordion Sliver App Bar Demo" width="300"/>
+
+
+
 ## Features
 - Accordion-style SliverAppBar with custom animations.
 - Supports expanded and collapsed states for child widgets.

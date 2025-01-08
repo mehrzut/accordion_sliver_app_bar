@@ -41,7 +41,39 @@ class _MyHomePageState extends State<MyHomePage> {
                   pinned: true,
                   floating: true,
                   safeArea: false,
+                  backgroundBuilder: (context, progress) => Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.network(
+                            fit: BoxFit.fitWidth,
+                            'https://picsum.photos/200',
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withOpacity(1 - progress),
+                                Colors.black,
+                              ],
+                            )),
+                          ),
+                        ],
+                      ),
                   children: [
+                AccordionSliverChild.vanish(
+                  child: SizedSliverChild(
+                      preferredSize: Size(
+                        MediaQuery.sizeOf(context).width,
+                        110,
+                      ),
+                      child: SizedBox(
+                        width: MediaQuery.sizeOf(context).width,
+                        height: 110,
+                      )),
+                  priority: 2,
+                ),
                 AccordionSliverChild(
                   wrapperBuilder: (context, child, size, isExpanded) =>
                       Container(
@@ -63,7 +95,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       child: SizedBox(
                         width: MediaQuery.sizeOf(context).width,
                         height: 210,
-                        child: const Center(child: Text('expanded!')),
+                        child: const Center(child: Text('Expanded!')),
                       )),
                   collapsed: SizedSliverChild(
                     preferredSize: Size(
@@ -73,42 +105,51 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: SizedBox(
                       width: MediaQuery.sizeOf(context).width,
                       height: 100,
-                      child: const Center(child: Text('collapsed!')),
+                      child: const Center(child: Text('Collapsed!')),
                     ),
                   ),
                   priority: 10,
                 ),
-                AccordionSliverChild(
-                  expanded: SizedSliverChild(
+                AccordionSliverChild.static(
+                  child: SizedSliverChild(
                       preferredSize: Size(
                         MediaQuery.sizeOf(context).width,
-                        110,
+                        50,
                       ),
                       child: Container(
                         width: MediaQuery.sizeOf(context).width,
-                        height: 110,
-                        color: Colors.amber,
+                        height: 50,
+                        color: Colors.blue,
+                        child: const Center(
+                          child: Text('Static child'),
+                        ),
                       )),
-                  collapsed: SizedSliverChild(
-                    preferredSize: Size(
-                      MediaQuery.sizeOf(context).width,
-                      48,
-                    ),
-                    child: Container(
-                      width: MediaQuery.sizeOf(context).width,
-                      height: 48,
-                      color: Colors.pink,
-                    ),
-                  ),
-                  priority: 2,
+                  priority: 3,
+                ),
+                AccordionSliverChild.vanish(
+                  child: SizedSliverChild(
+                      preferredSize: Size(
+                        MediaQuery.sizeOf(context).width,
+                        50,
+                      ),
+                      child: Container(
+                        width: MediaQuery.sizeOf(context).width,
+                        height: 50,
+                        color: Colors.red,
+                        child: const Center(
+                          child: Text('Vanishing child'),
+                        ),
+                      )),
+                  priority: 1,
                 ),
               ])),
           SliverList(
               delegate: SliverChildBuilderDelegate(
             (context, index) => Container(
-              height: 100,
+              height: 500,
               color: Colors.primaries.reversed
-                  .toList()[index % Colors.primaries.length],
+                  .toList()[index % Colors.primaries.length]
+                  .withOpacity(0.4),
             ),
           )),
         ],
