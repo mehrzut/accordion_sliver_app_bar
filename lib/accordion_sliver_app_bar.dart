@@ -1,371 +1,247 @@
-library accordion_sliver_app_bar;
-
-import 'package:accordion_sliver_app_bar/core/extensions.dart';
 import 'package:flutter/material.dart';
 
-/// A widget that creates a dynamic sliver app bar with expandable and collapsible children.
-/// The children expand and collapse based on their priority values.
 class AccordionSliverAppBar extends StatefulWidget {
-  AccordionSliverAppBar({super.key, required this.delegate})
-      : assert(
-            delegate.children.map((e) => e.priority).toSet().length ==
-                delegate.children.length,
-            'All children priorities must be unique.'),
-        assert(
-            delegate.children.every(
-              (element) => element.priority >= 0,
-            ),
-            'All children priorities must be greater than or equal to 0.');
+  final Widget? background;
+  final List<AccordionSliverChild> delegates;
+  final Widget Function(double progress)? backgroundOverlayBuilder;
+  final bool floating;
 
-  /// Delegate that defines the behavior and configuration of the sliver app bar.
-  final AccordionSliverDelegate delegate;
+  const AccordionSliverAppBar({
+    super.key,
+    this.background,
+    required this.delegates,
+    this.backgroundOverlayBuilder,
+    this.floating = false,
+  });
 
   @override
   State<AccordionSliverAppBar> createState() => _AccordionSliverAppBarState();
 }
 
 class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
-  /// Computes the total expanded height by summing the heights of all expanded children.
-  double get expandedHeight => widget.delegate.children.fold(
-        0.0,
-        (previousValue, element) =>
-            previousValue + element.expanded.preferredSize.height,
-      );
+  List<AccordionSliverChild>? _delegates;
+  Map<AccordionSliverChild, double>? _previousHeights;
+  Map<AccordionSliverChild, Map<double, Widget>> _widgetCache = {};
 
-  /// Computes the total collapsed height by summing the heights of all collapsed children.
-  double get collapsedHeight => widget.delegate.children.fold(
-        0.0,
-        (previousValue, element) =>
-            previousValue + element.collapsed.preferredSize.height,
-      );
+  void _calculatePreviousHeights() {
+    if (widget.delegates.isEmpty) {
+      _previousHeights = {};
+      return;
+    }
+
+    List<AccordionSliverChild> sortedDelegates = List.from(_delegates!);
+    sortedDelegates.sort((a, b) => b.priority.compareTo(a.priority));
+
+    double cumulativeSum = 0;
+    _previousHeights = {};
+    for (var delegate in sortedDelegates) {
+      _previousHeights![delegate] = cumulativeSum;
+      cumulativeSum += delegate.expandedHeight - delegate.collapsedHeight;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _delegates = widget.delegates;
+    _calculatePreviousHeights();
+  }
+
+  @override
+  void didUpdateWidget(covariant AccordionSliverAppBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.delegates != _delegates) {
+      _delegates = widget.delegates;
+      _calculatePreviousHeights();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final double totalExpandedHeight = widget.delegates
+        .fold(0.0, (sum, delegate) => sum + delegate.expandedHeight);
+    final double totalCollapsedHeight = widget.delegates
+        .fold(0.0, (sum, delegate) => sum + delegate.collapsedHeight);
+
     return SliverAppBar(
+      pinned: true,
+      floating: widget.floating,
+      expandedHeight: totalExpandedHeight,
+      toolbarHeight: totalCollapsedHeight,
+      collapsedHeight: totalCollapsedHeight,
       automaticallyImplyLeading: false,
-      expandedHeight: expandedHeight -
-          (widget.delegate.safeArea
-              ? 0
-              : MediaQuery.paddingOf(context).vertical),
-      collapsedHeight: collapsedHeight -
-          (widget.delegate.safeArea
-              ? 0
-              : MediaQuery.paddingOf(context).vertical),
-      toolbarHeight: collapsedHeight -
-          (widget.delegate.safeArea
-              ? 0
-              : MediaQuery.paddingOf(context).vertical),
-      pinned: widget.delegate.pinned,
-      floating: widget.delegate.floating,
-      flexibleSpace: FlexibleSpaceBar(
-        titlePadding: EdgeInsets.zero,
-        expandedTitleScale: 1.0,
-        collapseMode: CollapseMode.none,
-        background: const SizedBox(),
-        title: SafeArea(
-          bottom: widget.delegate.safeArea,
-          top: widget.delegate.safeArea,
-          left: widget.delegate.safeArea,
-          right: widget.delegate.safeArea,
-          child: _AccordionSliverChildrenList(
-            delegate: widget.delegate,
-          ),
-        ),
+      flexibleSpace: LayoutBuilder(
+        builder: (context, constraints) {
+          final double flexibleSpaceCurrentHeight = constraints.biggest.height;
+          final double expansionAmount =
+              flexibleSpaceCurrentHeight - totalCollapsedHeight;
+
+          double progress = totalExpandedHeight == totalCollapsedHeight
+              ? 1.0
+              : (flexibleSpaceCurrentHeight - totalCollapsedHeight) /
+                  (totalExpandedHeight - totalCollapsedHeight);
+          progress = progress.clamp(0.0, 1.0);
+
+          // Calculate current heights and progresses for each delegate
+          List<double> currentHeights = [];
+          List<double> progresses = [];
+          for (var delegate in widget.delegates) {
+            double previousHeights = _previousHeights![delegate]!;
+            double heightDiff =
+                delegate.expandedHeight - delegate.collapsedHeight;
+            double delegateProgress;
+            if (expansionAmount < previousHeights) {
+              currentHeights.add(delegate.collapsedHeight);
+              delegateProgress = 0;
+            } else if (expansionAmount < previousHeights + heightDiff) {
+              double additionalExpansion = expansionAmount - previousHeights;
+              currentHeights
+                  .add(delegate.collapsedHeight + additionalExpansion);
+              delegateProgress = additionalExpansion / heightDiff;
+            } else {
+              currentHeights.add(delegate.expandedHeight);
+              delegateProgress = 1;
+            }
+            progresses.add(delegateProgress);
+          }
+
+          // Calculate top positions for each delegate
+          List<double> tops = [];
+          double cumulativeTop = 0;
+          for (double height in currentHeights) {
+            tops.add(cumulativeTop);
+            cumulativeTop += height;
+          }
+
+          // Create Positioned widgets for each delegate
+          List<Widget> delegateWidgets =
+              widget.delegates.asMap().entries.map((entry) {
+            int index = entry.key;
+            var delegate = entry.value;
+            double top = tops[index];
+            double height = currentHeights[index];
+            double progress = progresses[index];
+
+            Widget child;
+            if (progress == 0 || progress == 1) {
+              if (_widgetCache.containsKey(delegate) &&
+                  (_widgetCache[delegate]?.containsKey(progress) ?? false)) {
+                child = _widgetCache[delegate]![progress]!;
+              } else {
+                Widget newWidget = delegate.animatedBuilder(context, progress);
+                _widgetCache[delegate] ??= {};
+                _widgetCache[delegate]![progress] = newWidget;
+                child = newWidget;
+              }
+            } else {
+              child = delegate.animatedBuilder(context, progress);
+            }
+
+            return Positioned(
+              key: ValueKey(delegate),
+              top: top,
+              left: 0,
+              right: 0,
+              height: height,
+              child: delegate.wrapperBuilder(
+                context,
+                SingleChildScrollView(
+                  physics: const NeverScrollableScrollPhysics(),
+                  clipBehavior: delegate.clipBehavior,
+                  child: child,
+                ),
+              ),
+            );
+          }).toList();
+
+          // Create Stack with background, optional overlay, and delegates
+          List<Widget> stackChildren = [];
+          if (widget.background != null) {
+            stackChildren.add(widget.background!);
+          }
+          if (widget.backgroundOverlayBuilder != null) {
+            stackChildren.add(
+              widget.backgroundOverlayBuilder!(progress),
+            );
+          }
+          stackChildren.addAll(delegateWidgets);
+
+          return Stack(
+            fit: StackFit.expand,
+            children: stackChildren,
+          );
+        },
       ),
     );
   }
 }
 
-/// A helper widget to manage the animations of the children in the sliver app bar.
-class _AccordionSliverChildrenList extends StatefulWidget {
-  const _AccordionSliverChildrenList({required this.delegate});
-  final AccordionSliverDelegate delegate;
-
-  @override
-  State<_AccordionSliverChildrenList> createState() =>
-      _AccordionSliverChildrenListState();
-}
-
-class _AccordionSliverChildrenListState
-    extends State<_AccordionSliverChildrenList> {
-  List<_SliverChildRange> shrinkPoints = [];
-
-  double get expandedHeight => widget.delegate.children.fold(
-        0.0,
-        (previousValue, element) =>
-            previousValue + element.expanded.preferredSize.height,
-      );
-
-  double get collapsedHeight => widget.delegate.children.fold(
-        0.0,
-        (previousValue, element) =>
-            previousValue + element.collapsed.preferredSize.height,
-      );
-
-  /// Returns the list of children sorted by priority.
-  List<AccordionSliverChild> get _sortedByPriority => [
-        ...widget.delegate.children
-      ]..sort((a, b) => a.priority.compareTo(b.priority));
-
-  @override
-  void initState() {
-    _configure();
-    super.initState();
-  }
-
-  @override
-  void didUpdateWidget(covariant _AccordionSliverChildrenList oldWidget) {
-    _configure();
-    super.didUpdateWidget(oldWidget);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final lastPriorityCollapsed =
-            _getPriorityOfLastCollapsingItem(constraints.maxHeight);
-
-        final progress = (constraints.maxHeight - collapsedHeight) /
-            (expandedHeight - collapsedHeight);
-        return Stack(
-          children: [
-            widget.delegate.backgroundBuilder != null
-                ? widget.delegate.backgroundBuilder!(
-                    context, progress.clamp(0.0, 1.0))
-                : const SizedBox(),
-            Align(
-              alignment: widget.delegate.animationAlignment,
-              child: SingleChildScrollView(
-                physics: const NeverScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: widget.delegate.crossAxisAlignment,
-                  mainAxisAlignment: widget.delegate.mainAxisAlignment,
-                  children: widget.delegate.children.map((child) {
-                    final isExpanded = lastPriorityCollapsed == null
-                        ? true
-                        : child.priority > lastPriorityCollapsed;
-                    final animatedChild = AnimatedCrossFade(
-                      alignment: widget.delegate.animationAlignment,
-                      firstChild: SizedBox(
-                          key: UniqueKey(), child: child.expanded.child),
-                      secondChild: SizedBox(
-                          key: UniqueKey(), child: child.collapsed.child),
-                      crossFadeState: isExpanded
-                          ? CrossFadeState.showFirst
-                          : CrossFadeState.showSecond,
-                      duration: widget.delegate.duration,
-                      layoutBuilder: widget.delegate.layoutBuilder ??
-                          AnimatedCrossFade.defaultLayoutBuilder,
-                      firstCurve: Curves.easeIn,
-                      secondCurve: Curves.easeOut,
-                      sizeCurve: Curves.decelerate,
-                    );
-                    if (child.wrapperBuilder != null) {
-                      return AnimatedContainer(
-                        duration: widget.delegate.duration,
-                        width: isExpanded
-                            ? child.expanded.preferredSize.width
-                            : child.collapsed.preferredSize.width,
-                        height: isExpanded
-                            ? child.expanded.preferredSize.height
-                            : child.collapsed.preferredSize.height,
-                        child: Align(
-                          alignment: widget.delegate.animationAlignment,
-                          child: child.wrapperBuilder!(
-                              context,
-                              animatedChild,
-                              isExpanded
-                                  ? child.expanded.preferredSize
-                                  : child.collapsed.preferredSize,
-                              isExpanded),
-                        ),
-                      );
-                    }
-                    return animatedChild;
-                  }).toList(),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  /// Determines the priority of the last child that is in a collapsed state.
-  int? _getPriorityOfLastCollapsingItem(double currentHeight) {
-    final firstExpandedIndex = shrinkPoints.indexWhere(
-      (element) => element.expandsOnAndAfter <= currentHeight,
-    );
-    if (firstExpandedIndex == -1) {
-      // All items are collapsed
-      return _sortedByPriority.last.priority;
-    }
-    final newCollapsedItemIndex = firstExpandedIndex - 1;
-    if (newCollapsedItemIndex < shrinkPoints.length &&
-        newCollapsedItemIndex >= 0) {
-      final newCollapsedItem = shrinkPoints[newCollapsedItemIndex];
-      return newCollapsedItem.priority;
-    }
-    // All items are expanded
-    return null;
-  }
-
-  /// Configures the shrink points based on the priorities of the children.
-  void _configure() {
-    for (var i = 0; i < _sortedByPriority.length; i++) {
-      final collapsed = _sortedByPriority.splitAtNotContaining(i).first;
-      final expanded = _sortedByPriority.splitAtNotContaining(i).last;
-      final itemsMinSpaceToExpand = collapsed.fold(
-            0.0,
-            (previousValue, element) =>
-                previousValue + element.collapsed.preferredSize.height,
-          ) +
-          expanded.fold(
-            0.0,
-            (previousValue, element) =>
-                previousValue + element.expanded.preferredSize.height,
-          ) +
-          _sortedByPriority[i].expanded.preferredSize.height;
-      shrinkPoints = shrinkPoints.addOrUpdateWhere(
-          (e) => e.priority == _sortedByPriority[i].priority,
-          (e) => (_SliverChildRange(
-                priority: _sortedByPriority[i].priority,
-                expandsOnAndAfter: itemsMinSpaceToExpand,
-              )));
-    }
-  }
-}
-
-/// A model representing a child in the accordion sliver app bar.
 class AccordionSliverChild {
-  final SizedSliverChild expanded;
-  final SizedSliverChild collapsed;
-  final Widget Function(
-          BuildContext context, Widget child, Size size, bool isExpanded)?
-      wrapperBuilder;
-
-  /// The priority of the child.
-  /// Higher priority numbers collapse later.
+  final double expandedHeight;
+  final double collapsedHeight;
   final int priority;
-  final bool isExpanded;
+  final Widget Function(BuildContext context, Widget child) wrapperBuilder;
+  final Widget Function(BuildContext context, double value) animatedBuilder;
+  final Clip clipBehavior;
 
-  AccordionSliverChild._({
-    required this.expanded,
-    required this.collapsed,
+  AccordionSliverChild({
+    required this.expandedHeight,
+    required this.collapsedHeight,
     required this.priority,
-    this.isExpanded = true,
-    this.wrapperBuilder,
+    required this.wrapperBuilder,
+    required this.animatedBuilder,
+    this.clipBehavior = Clip.antiAlias,
   });
 
-  AccordionSliverChild collapse() => copyWith(isExpanded: false);
-
-  /// Creates a child that vanishes (becomes zero size) when collapsed.
+  /// Creates a child that animates and fades out when collapsing.
   factory AccordionSliverChild.vanish({
-    required SizedSliverChild child,
+    required double height,
     required int priority,
-    Widget Function(
-            BuildContext context, Widget child, Size size, bool isExpanded)?
-        wrapperBuilder,
-  }) =>
-      AccordionSliverChild._(
-        expanded: child,
-        collapsed: SizedSliverChild(
-          preferredSize: Size.zero,
-          child: const SizedBox(),
-        ),
-        priority: priority,
-        wrapperBuilder: wrapperBuilder,
-      );
-
-  factory AccordionSliverChild({
-    required SizedSliverChild expanded,
-    required SizedSliverChild collapsed,
-    required int priority,
-    Widget Function(
-            BuildContext context, Widget child, Size size, bool isExpanded)?
-        wrapperBuilder,
-  }) =>
-      AccordionSliverChild._(
-        expanded: expanded,
-        collapsed: collapsed,
-        priority: priority,
-        wrapperBuilder: wrapperBuilder,
-      );
-
-  /// Creates a child that is static and won't collapse.
-  factory AccordionSliverChild.static({
-    required SizedSliverChild child,
-    required int priority,
-    Widget Function(
-            BuildContext context, Widget child, Size size, bool isExpanded)?
-        wrapperBuilder,
-  }) =>
-      AccordionSliverChild._(
-        expanded: child,
-        collapsed: child,
-        priority: priority,
-        wrapperBuilder: wrapperBuilder,
-      );
-
-  AccordionSliverChild copyWith(
-          {SizedSliverChild? expanded,
-          SizedSliverChild? collapsed,
-          int? priority,
-          bool? isExpanded}) =>
-      AccordionSliverChild._(
-        expanded: expanded ?? this.expanded,
-        collapsed: collapsed ?? this.collapsed,
-        priority: priority ?? this.priority,
-        isExpanded: isExpanded ?? this.isExpanded,
-      );
-}
-
-/// A helper class to manage the state and range of child expansions.
-class _SliverChildRange {
-  final double expandsOnAndAfter;
-  final int priority;
-
-  _SliverChildRange({required this.expandsOnAndAfter, required this.priority});
-
-  @override
-  String toString() {
-    return '_SliverChildRange(expandsOnAndAfter: $expandsOnAndAfter, priority: $priority)';
+    required Widget Function(BuildContext context, Widget child) wrapperBuilder,
+    required Widget Function(BuildContext context, double value)
+        animatedBuilder,
+    Clip clipBehavior = Clip.antiAlias,
+  }) {
+    return AccordionSliverChild(
+      expandedHeight: height,
+      collapsedHeight: 0,
+      priority: priority,
+      wrapperBuilder: wrapperBuilder,
+      animatedBuilder: animatedBuilder,
+      clipBehavior: clipBehavior,
+    );
   }
-}
 
-/// The delegate that defines the configuration for the accordion sliver app bar.
-class AccordionSliverDelegate {
-  final List<AccordionSliverChild> children;
-  final bool safeArea;
-  final bool floating;
-  final bool pinned;
-  final CrossAxisAlignment crossAxisAlignment;
-  final MainAxisAlignment mainAxisAlignment;
-  final AlignmentGeometry animationAlignment;
-  final AnimatedCrossFadeBuilder? layoutBuilder;
-  final Duration duration;
-  final Widget Function(BuildContext context, double progress)?
-      backgroundBuilder;
+  /// Creates a static child that does not animate between expanded and collapsed states.
+  factory AccordionSliverChild.static({
+    required double height,
+    required int priority,
+    required Widget Function(BuildContext context) builder,
+    Clip clipBehavior = Clip.antiAlias,
+  }) {
+    return AccordionSliverChild(
+      expandedHeight: height,
+      collapsedHeight: height,
+      priority: priority,
+      wrapperBuilder: (context, child) => builder(context),
+      animatedBuilder: (context, value) => const SizedBox(),
+      clipBehavior: clipBehavior,
+    );
+  }
 
-  AccordionSliverDelegate({
-    required this.children,
-    this.safeArea = true,
-    this.floating = false,
-    this.pinned = false,
-    this.layoutBuilder,
-    this.crossAxisAlignment = CrossAxisAlignment.center,
-    this.mainAxisAlignment = MainAxisAlignment.start,
-    this.animationAlignment = AlignmentDirectional.bottomCenter,
-    required this.duration,
-    this.backgroundBuilder,
-  });
-}
-
-/// A helper class to define a child with its size and widget.
-class SizedSliverChild {
-  final Widget child;
-  final Size preferredSize;
-  SizedSliverChild({required this.child, required this.preferredSize});
+  factory AccordionSliverChild.staticVanish({
+    required double height,
+    required int priority,
+    required Widget Function(BuildContext context) builder,
+    Clip clipBehavior = Clip.antiAlias,
+  }) {
+    return AccordionSliverChild(
+      expandedHeight: height,
+      collapsedHeight: 0,
+      priority: priority,
+      wrapperBuilder: (context, child) => builder(context),
+      animatedBuilder: (context, value) => const SizedBox(),
+      clipBehavior: clipBehavior,
+    );
+  }
 }
