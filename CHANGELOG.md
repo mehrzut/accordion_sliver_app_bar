@@ -1,7 +1,16 @@
-## 0.0.3
+## 0.0.5
 
-* initial release.
+#### New Features and Enhancements
+* Built-in safe area handling ensures consistent behavior across devices.
+* Custom animation support via `animatedBuilder` in `AccordionSliverChild` allows for flexible child transitions.
+* Added `background` and `backgroundOverlayBuilder` for enhanced visual customization.
+* A widget cache improves performance by storing rendered widgets for different states.
+* Introduced a new `staticVanish` factory method for `AccordionSliverChild`, enabling static children that vanish when collapsed.
 
+#### Breaking Changes
+* The constructor no longer accepts a delegate, requiring direct property updates.
+* `AccordionSliverChild` now uses `expandedHeight`, `collapsedHeight`, and other new properties, necessitating updates to child definitions.
+* Factory methods for `AccordionSliverChild` have new signatures, requiring adjustments in usage.
 
 ## 0.0.4
 
@@ -9,3 +18,8 @@
 * Added `AccordionSliverChild.static` to make an static child
 * In `AccordionSliverChild.vanish` changed the name of child from `expanded` to `child`
 * Added `backgroundBuilder` to `AccordionSliverDelegate` for background customization
+
+## 0.0.3
+
+* initial release.
+
