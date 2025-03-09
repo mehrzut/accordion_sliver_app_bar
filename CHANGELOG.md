@@ -1,3 +1,8 @@
+## 0.0.6
+
+* Moved demo gif file to example
+* Bug fix
+
 ## 0.0.5
 
 #### New Features and Enhancements
