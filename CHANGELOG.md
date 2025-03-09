@@ -1,3 +1,7 @@
+## 0.0.7
+
+* Updated README
+
 ## 0.0.6
 
 * Moved demo gif file to example

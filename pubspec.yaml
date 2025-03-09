@@ -1,6 +1,6 @@
 name: accordion_sliver_app_bar
 description: "A widget that provides a dynamic sliver app bar that expands and collapses its children based on priorities."
-version: 0.0.6
+version: 0.0.7
 homepage: https://github.com/mehrzut/accordion_sliver_app_bar
 
 
