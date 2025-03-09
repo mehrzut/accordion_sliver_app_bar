@@ -4,7 +4,7 @@
 
 
 ## Demo
-<img src="https://raw.githubusercontent.com/mehrzut/accordion_sliver_app_bar/master/assets/demo.gif" alt="Accordion Sliver App Bar Demo" width="300"/>
+<img src="https://raw.githubusercontent.com/mehrzut/accordion_sliver_app_bar/master/example/assets/demo.gif" alt="Accordion Sliver App Bar Demo" width="300"/>
 
 
 
