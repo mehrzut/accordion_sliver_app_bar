@@ -27,37 +27,37 @@ class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
     // Compute safe area height from MediaQuery.
     final safeAreaHeight = MediaQuery.of(context).padding.top;
 
-    // Create a safe area delegate. Its height is fixed (static) and it returns nothing.
-    final safeAreaDelegate = AccordionSliverChild.static(
+    // Create a safe area widget. Its height is fixed (static) and it returns nothing.
+    final safeAreaWidget = AccordionSliverChild.static(
       height: safeAreaHeight,
       priority: 10000, // a high priority to ensure it is at the top
       builder: (context) => const SizedBox.shrink(),
     );
 
-    // Combine the safe area delegate with the provided delegates.
-    final combinedDelegates = <AccordionSliverChild>[
-      safeAreaDelegate,
+    // Combine the safe area widget with the provided children.
+    final combinedChildren = <AccordionSliverChild>[
+      safeAreaWidget,
       ...widget.children,
     ];
 
-    // Calculate the total expanded and collapsed heights based on combined delegates.
-    final double totalExpandedHeight = combinedDelegates.fold(
+    // Calculate the total expanded and collapsed heights based on combined children.
+    final double totalExpandedHeight = combinedChildren.fold(
       0.0,
-      (sum, delegate) => sum + delegate.expandedHeight,
+      (sum, child) => sum + child.expandedHeight,
     );
-    final double totalCollapsedHeight = combinedDelegates.fold(
+    final double totalCollapsedHeight = combinedChildren.fold(
       0.0,
-      (sum, delegate) => sum + delegate.collapsedHeight,
+      (sum, child) => sum + child.collapsedHeight,
     );
 
-    // Calculate previous heights for each delegate.
+    // Calculate previous heights for each child.
     final previousHeights = <AccordionSliverChild, double>{};
-    final sortedDelegates = List<AccordionSliverChild>.from(combinedDelegates)
+    final sortedChildren = List<AccordionSliverChild>.from(combinedChildren)
       ..sort((a, b) => b.priority.compareTo(a.priority));
     double cumulativeSum = 0;
-    for (var delegate in sortedDelegates) {
-      previousHeights[delegate] = cumulativeSum;
-      cumulativeSum += delegate.expandedHeight - delegate.collapsedHeight;
+    for (var item in sortedChildren) {
+      previousHeights[item] = cumulativeSum;
+      cumulativeSum += item.expandedHeight - item.collapsedHeight;
     }
 
     return SliverAppBar(
@@ -80,30 +80,30 @@ class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
                   (totalExpandedHeight - totalCollapsedHeight);
           progress = progress.clamp(0.0, 1.0);
 
-          // Calculate current heights and progress for each delegate.
+          // Calculate current heights and progress for each child.
           List<double> currentHeights = [];
           List<double> progresses = [];
-          for (var delegate in combinedDelegates) {
-            final double previous = previousHeights[delegate] ?? 0.0;
+          for (var item in combinedChildren) {
+            final double previous = previousHeights[item] ?? 0.0;
             final double heightDiff =
-                delegate.expandedHeight - delegate.collapsedHeight;
-            double delegateProgress;
+                item.expandedHeight - item.collapsedHeight;
+            double itemProgress;
             if (expansionAmount < previous) {
-              currentHeights.add(delegate.collapsedHeight);
-              delegateProgress = 0;
+              currentHeights.add(item.collapsedHeight);
+              itemProgress = 0;
             } else if (expansionAmount < previous + heightDiff) {
               final double additionalExpansion = expansionAmount - previous;
               currentHeights
-                  .add(delegate.collapsedHeight + additionalExpansion);
-              delegateProgress = additionalExpansion / heightDiff;
+                  .add(item.collapsedHeight + additionalExpansion);
+              itemProgress = additionalExpansion / heightDiff;
             } else {
-              currentHeights.add(delegate.expandedHeight);
-              delegateProgress = 1;
+              currentHeights.add(item.expandedHeight);
+              itemProgress = 1;
             }
-            progresses.add(delegateProgress);
+            progresses.add(itemProgress);
           }
 
-          // Calculate top positions for each delegate.
+          // Calculate top positions for each child.
           List<double> tops = [];
           double cumulativeTop = 0;
           for (double height in currentHeights) {
@@ -111,43 +111,43 @@ class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
             cumulativeTop += height;
           }
 
-          // Create Positioned widgets for each delegate.
-          List<Widget> delegateWidgets = [];
-          for (int index = 0; index < combinedDelegates.length; index++) {
-            final delegate = combinedDelegates[index];
+          // Create Positioned widgets for each child.
+          List<Widget> children = [];
+          for (int index = 0; index < combinedChildren.length; index++) {
+            final item = combinedChildren[index];
             final double top = tops[index];
             final double height = currentHeights[index];
-            final double delegateProgress = progresses[index];
+            final double itemProgress = progresses[index];
 
             Widget child;
-            if (delegateProgress == 0 || delegateProgress == 1) {
-              if (_widgetCache.containsKey(delegate) &&
-                  (_widgetCache[delegate]?.containsKey(delegateProgress) ??
+            if (itemProgress == 0 || itemProgress == 1) {
+              if (_widgetCache.containsKey(item) &&
+                  (_widgetCache[item]?.containsKey(itemProgress) ??
                       false)) {
-                child = _widgetCache[delegate]![delegateProgress]!;
+                child = _widgetCache[item]![itemProgress]!;
               } else {
                 Widget newWidget =
-                    delegate.animatedBuilder(context, delegateProgress);
-                _widgetCache[delegate] ??= {};
-                _widgetCache[delegate]![delegateProgress] = newWidget;
+                    item.animatedBuilder(context, itemProgress);
+                _widgetCache[item] ??= {};
+                _widgetCache[item]![itemProgress] = newWidget;
                 child = newWidget;
               }
             } else {
-              child = delegate.animatedBuilder(context, delegateProgress);
+              child = item.animatedBuilder(context, itemProgress);
             }
 
-            delegateWidgets.add(
+            children.add(
               Positioned(
-                key: ValueKey(delegate),
+                key: ValueKey(item),
                 top: top,
                 left: 0,
                 right: 0,
                 height: height,
-                child: delegate.wrapperBuilder(
+                child: item.wrapperBuilder(
                   context,
                   SingleChildScrollView(
                     physics: const NeverScrollableScrollPhysics(),
-                    clipBehavior: delegate.clipBehavior,
+                    clipBehavior: item.clipBehavior,
                     child: child,
                   ),
                 ),
@@ -155,7 +155,7 @@ class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
             );
           }
 
-          // Build the stack containing background, optional overlay, and all delegate widgets.
+          // Build the stack containing background, optional overlay, and all children.
           List<Widget> stackChildren = [];
           if (widget.background != null) {
             stackChildren.add(widget.background!);
@@ -163,7 +163,7 @@ class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
           if (widget.backgroundOverlayBuilder != null) {
             stackChildren.add(widget.backgroundOverlayBuilder!(progress));
           }
-          stackChildren.addAll(delegateWidgets);
+          stackChildren.addAll(children);
 
           return Stack(
             fit: StackFit.expand,
