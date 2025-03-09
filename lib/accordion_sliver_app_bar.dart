@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 
 class AccordionSliverAppBar extends StatefulWidget {
   final Widget? background;
-  final List<AccordionSliverChild> delegates;
+  final List<AccordionSliverChild> children;
   final Widget Function(double progress)? backgroundOverlayBuilder;
   final bool floating;
 
   const AccordionSliverAppBar({
     super.key,
     this.background,
-    required this.delegates,
+    required this.children,
     this.backgroundOverlayBuilder,
     this.floating = false,
   });
@@ -19,51 +19,49 @@ class AccordionSliverAppBar extends StatefulWidget {
 }
 
 class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
-  List<AccordionSliverChild>? _delegates;
-  Map<AccordionSliverChild, double>? _previousHeights;
+  // We keep a widget cache for animated builders as before.
   Map<AccordionSliverChild, Map<double, Widget>> _widgetCache = {};
-
-  void _calculatePreviousHeights() {
-    if (widget.delegates.isEmpty) {
-      _previousHeights = {};
-      return;
-    }
-
-    List<AccordionSliverChild> sortedDelegates = List.from(_delegates!);
-    sortedDelegates.sort((a, b) => b.priority.compareTo(a.priority));
-
-    double cumulativeSum = 0;
-    _previousHeights = {};
-    for (var delegate in sortedDelegates) {
-      _previousHeights![delegate] = cumulativeSum;
-      cumulativeSum += delegate.expandedHeight - delegate.collapsedHeight;
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _delegates = widget.delegates;
-    _calculatePreviousHeights();
-  }
-
-  @override
-  void didUpdateWidget(covariant AccordionSliverAppBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.delegates != _delegates) {
-      _delegates = widget.delegates;
-      _calculatePreviousHeights();
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    final double totalExpandedHeight = widget.delegates
-        .fold(0.0, (sum, delegate) => sum + delegate.expandedHeight);
-    final double totalCollapsedHeight = widget.delegates
-        .fold(0.0, (sum, delegate) => sum + delegate.collapsedHeight);
+    // Compute safe area height from MediaQuery.
+    final safeAreaHeight = MediaQuery.of(context).padding.top;
+
+    // Create a safe area delegate. Its height is fixed (static) and it returns nothing.
+    final safeAreaDelegate = AccordionSliverChild.static(
+      height: safeAreaHeight,
+      priority: 10000, // a high priority to ensure it is at the top
+      builder: (context) => const SizedBox.shrink(),
+    );
+
+    // Combine the safe area delegate with the provided delegates.
+    final combinedDelegates = <AccordionSliverChild>[
+      safeAreaDelegate,
+      ...widget.children,
+    ];
+
+    // Calculate the total expanded and collapsed heights based on combined delegates.
+    final double totalExpandedHeight = combinedDelegates.fold(
+      0.0,
+      (sum, delegate) => sum + delegate.expandedHeight,
+    );
+    final double totalCollapsedHeight = combinedDelegates.fold(
+      0.0,
+      (sum, delegate) => sum + delegate.collapsedHeight,
+    );
+
+    // Calculate previous heights for each delegate.
+    final previousHeights = <AccordionSliverChild, double>{};
+    final sortedDelegates = List<AccordionSliverChild>.from(combinedDelegates)
+      ..sort((a, b) => b.priority.compareTo(a.priority));
+    double cumulativeSum = 0;
+    for (var delegate in sortedDelegates) {
+      previousHeights[delegate] = cumulativeSum;
+      cumulativeSum += delegate.expandedHeight - delegate.collapsedHeight;
+    }
 
     return SliverAppBar(
+      primary: false,
       pinned: true,
       floating: widget.floating,
       expandedHeight: totalExpandedHeight,
@@ -82,19 +80,19 @@ class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
                   (totalExpandedHeight - totalCollapsedHeight);
           progress = progress.clamp(0.0, 1.0);
 
-          // Calculate current heights and progresses for each delegate
+          // Calculate current heights and progress for each delegate.
           List<double> currentHeights = [];
           List<double> progresses = [];
-          for (var delegate in widget.delegates) {
-            double previousHeights = _previousHeights![delegate]!;
-            double heightDiff =
+          for (var delegate in combinedDelegates) {
+            final double previous = previousHeights[delegate] ?? 0.0;
+            final double heightDiff =
                 delegate.expandedHeight - delegate.collapsedHeight;
             double delegateProgress;
-            if (expansionAmount < previousHeights) {
+            if (expansionAmount < previous) {
               currentHeights.add(delegate.collapsedHeight);
               delegateProgress = 0;
-            } else if (expansionAmount < previousHeights + heightDiff) {
-              double additionalExpansion = expansionAmount - previousHeights;
+            } else if (expansionAmount < previous + heightDiff) {
+              final double additionalExpansion = expansionAmount - previous;
               currentHeights
                   .add(delegate.collapsedHeight + additionalExpansion);
               delegateProgress = additionalExpansion / heightDiff;
@@ -105,7 +103,7 @@ class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
             progresses.add(delegateProgress);
           }
 
-          // Calculate top positions for each delegate
+          // Calculate top positions for each delegate.
           List<double> tops = [];
           double cumulativeTop = 0;
           for (double height in currentHeights) {
@@ -113,56 +111,57 @@ class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
             cumulativeTop += height;
           }
 
-          // Create Positioned widgets for each delegate
-          List<Widget> delegateWidgets =
-              widget.delegates.asMap().entries.map((entry) {
-            int index = entry.key;
-            var delegate = entry.value;
-            double top = tops[index];
-            double height = currentHeights[index];
-            double progress = progresses[index];
+          // Create Positioned widgets for each delegate.
+          List<Widget> delegateWidgets = [];
+          for (int index = 0; index < combinedDelegates.length; index++) {
+            final delegate = combinedDelegates[index];
+            final double top = tops[index];
+            final double height = currentHeights[index];
+            final double delegateProgress = progresses[index];
 
             Widget child;
-            if (progress == 0 || progress == 1) {
+            if (delegateProgress == 0 || delegateProgress == 1) {
               if (_widgetCache.containsKey(delegate) &&
-                  (_widgetCache[delegate]?.containsKey(progress) ?? false)) {
-                child = _widgetCache[delegate]![progress]!;
+                  (_widgetCache[delegate]?.containsKey(delegateProgress) ??
+                      false)) {
+                child = _widgetCache[delegate]![delegateProgress]!;
               } else {
-                Widget newWidget = delegate.animatedBuilder(context, progress);
+                Widget newWidget =
+                    delegate.animatedBuilder(context, delegateProgress);
                 _widgetCache[delegate] ??= {};
-                _widgetCache[delegate]![progress] = newWidget;
+                _widgetCache[delegate]![delegateProgress] = newWidget;
                 child = newWidget;
               }
             } else {
-              child = delegate.animatedBuilder(context, progress);
+              child = delegate.animatedBuilder(context, delegateProgress);
             }
 
-            return Positioned(
-              key: ValueKey(delegate),
-              top: top,
-              left: 0,
-              right: 0,
-              height: height,
-              child: delegate.wrapperBuilder(
-                context,
-                SingleChildScrollView(
-                  physics: const NeverScrollableScrollPhysics(),
-                  clipBehavior: delegate.clipBehavior,
-                  child: child,
+            delegateWidgets.add(
+              Positioned(
+                key: ValueKey(delegate),
+                top: top,
+                left: 0,
+                right: 0,
+                height: height,
+                child: delegate.wrapperBuilder(
+                  context,
+                  SingleChildScrollView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    clipBehavior: delegate.clipBehavior,
+                    child: child,
+                  ),
                 ),
               ),
             );
-          }).toList();
+          }
 
-          // Create Stack with background, optional overlay, and delegates
+          // Build the stack containing background, optional overlay, and all delegate widgets.
           List<Widget> stackChildren = [];
           if (widget.background != null) {
             stackChildren.add(widget.background!);
           }
           if (widget.backgroundOverlayBuilder != null) {
-            stackChildren.add(
-              widget.backgroundOverlayBuilder!(progress),
-            );
+            stackChildren.add(widget.backgroundOverlayBuilder!(progress));
           }
           stackChildren.addAll(delegateWidgets);
 
@@ -206,7 +205,9 @@ class AccordionSliverChild {
       expandedHeight: height,
       collapsedHeight: 0,
       priority: priority,
-      wrapperBuilder: wrapperBuilder,
+      wrapperBuilder: (context, child) => SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
+          child: wrapperBuilder(context, child)),
       animatedBuilder: animatedBuilder,
       clipBehavior: clipBehavior,
     );
@@ -239,7 +240,9 @@ class AccordionSliverChild {
       expandedHeight: height,
       collapsedHeight: 0,
       priority: priority,
-      wrapperBuilder: (context, child) => builder(context),
+      wrapperBuilder: (context, child) => SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
+          child: builder(context)),
       animatedBuilder: (context, value) => const SizedBox(),
       clipBehavior: clipBehavior,
     );

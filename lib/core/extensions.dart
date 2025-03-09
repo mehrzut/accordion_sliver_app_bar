@@ -13,4 +13,13 @@ extension ListExt<T> on List<T> {
       return [...this, updatedItemGenerator(null)];
     }
   }
+
+  T? firstWhereOrNull(bool Function(T element) test) {
+    for (final element in this) {
+      if (test(element)) {
+        return element;
+      }
+    }
+    return null;
+  }
 }
