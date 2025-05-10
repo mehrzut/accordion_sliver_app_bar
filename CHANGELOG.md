@@ -1,3 +1,7 @@
+## 0.0.8
+
+* Added `safeArea` parameter to `AccordionSliverAppBar` to control whether the safe area is added to the app bar.
+
 ## 0.0.7
 
 * Updated README
