@@ -5,13 +5,14 @@ class AccordionSliverAppBar extends StatefulWidget {
   final List<AccordionSliverChild> children;
   final Widget Function(double progress)? backgroundOverlayBuilder;
   final bool floating;
-
+  final bool safeArea;
   const AccordionSliverAppBar({
     super.key,
     this.background,
     required this.children,
     this.backgroundOverlayBuilder,
     this.floating = false,
+    this.safeArea = true,
   });
 
   @override
@@ -36,7 +37,7 @@ class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
 
     // Combine the safe area widget with the provided children.
     final combinedChildren = <AccordionSliverChild>[
-      safeAreaWidget,
+      if (widget.safeArea) safeAreaWidget,
       ...widget.children,
     ];
 
@@ -93,8 +94,7 @@ class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
               itemProgress = 0;
             } else if (expansionAmount < previous + heightDiff) {
               final double additionalExpansion = expansionAmount - previous;
-              currentHeights
-                  .add(item.collapsedHeight + additionalExpansion);
+              currentHeights.add(item.collapsedHeight + additionalExpansion);
               itemProgress = additionalExpansion / heightDiff;
             } else {
               currentHeights.add(item.expandedHeight);
@@ -122,12 +122,10 @@ class _AccordionSliverAppBarState extends State<AccordionSliverAppBar> {
             Widget child;
             if (itemProgress == 0 || itemProgress == 1) {
               if (_widgetCache.containsKey(item) &&
-                  (_widgetCache[item]?.containsKey(itemProgress) ??
-                      false)) {
+                  (_widgetCache[item]?.containsKey(itemProgress) ?? false)) {
                 child = _widgetCache[item]![itemProgress]!;
               } else {
-                Widget newWidget =
-                    item.animatedBuilder(context, itemProgress);
+                Widget newWidget = item.animatedBuilder(context, itemProgress);
                 _widgetCache[item] ??= {};
                 _widgetCache[item]![itemProgress] = newWidget;
                 child = newWidget;
